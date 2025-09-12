@@ -1,0 +1,5 @@
+{
+  "name": "Switch \"History or without\" of xTiles Project Assistant",
+  "description": "A simple chat interface to interact with an AI assistant that helps structure projects for the xTiles tool, generating content in a specific Markdown format.",
+  "requestFramePermissions": []
+}
