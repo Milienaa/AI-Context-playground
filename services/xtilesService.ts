@@ -7,7 +7,7 @@ export interface GenerateProjectResponse {
 const XTILES_ENDPOINT =
   (import.meta as any).env?.DEV
     ? '/xtiles/api/ai/gpt/generate-from-md'
-    : 'https://stage.xtiles.app/api/ai/gpt/generate-from-md';
+    : '/api/xtiles/generate';
 
     export async function sendMarkdownToXtiles(md: string, projectId?: string): Promise<GenerateProjectResponse> {
         const payload = {
