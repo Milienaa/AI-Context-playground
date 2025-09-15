@@ -12,6 +12,7 @@ import {
     STRICT_OUTPUT_INSTRUCTION,
   } from "../constants";
   import { GroundingSource } from "../types";
+  import { sendMarkdownToXtiles } from "./xtilesService";
   
   // ✅ API_KEY з env
   const API_KEY = process.env.API_KEY;
@@ -75,17 +76,18 @@ import {
     projectContext?: string;
     inputTokens: number;
     outputTokens: number;
+    projectUrl?: string;
+    projectId?: string;
   }
   
   // ⬇️ sendMessage: рядок або Part[] (без role)
   export async function sendMessageToGemini(
     message: string,
     useContextTool: boolean,
-    includeHistory: boolean
+    includeHistory: boolean,
+    currentProjectId?: string
   ): Promise<GeminiResponse> {
-    const chatSession = includeHistory
-      ? getChat(useContextTool)
-      : initializeChat(useContextTool);
+    const chatSession = includeHistory ? getChat(useContextTool) : initializeChat(useContextTool);
   
     const finalResponse: GeminiResponse = {
       text: "",
@@ -97,14 +99,11 @@ import {
   
     try {
       // ✅ передаємо як { message: string }
-      let response: GenerateContentResponse = await chatSession.sendMessage({
-        message,
-      });
+      let response: GenerateContentResponse = await chatSession.sendMessage({ message });
   
       if (response.usageMetadata) {
         finalResponse.inputTokens += response.usageMetadata.promptTokenCount ?? 0;
-        finalResponse.outputTokens +=
-          response.usageMetadata.candidatesTokenCount ?? 0;
+        finalResponse.outputTokens += response.usageMetadata.candidatesTokenCount ?? 0;
       }
   
       // Обробка можливого functionCall
@@ -130,33 +129,40 @@ import {
                 response: { success: true },
               },
             },
-          ] as const; // <- структура відповідає PartUnion
+          ] as const;
   
           response = await chatSession.sendMessage({
-            message: toolParts as unknown as any[], // підказка типовизатору (SDK очікує PartUnion[])
+            message: toolParts as unknown as any[],
           });
   
           if (response.usageMetadata) {
-            finalResponse.inputTokens +=
-              response.usageMetadata.promptTokenCount ?? 0;
-            finalResponse.outputTokens +=
-              response.usageMetadata.candidatesTokenCount ?? 0;
+            finalResponse.inputTokens += response.usageMetadata.promptTokenCount ?? 0;
+            finalResponse.outputTokens += response.usageMetadata.candidatesTokenCount ?? 0;
           }
         } else {
           keepLooping = false;
         }
       }
   
-      // ✅ text — властивість
-      finalResponse.text = response.text ?? "";
+      // ✅ Markdown від Gemini
+      const md = (response.text ?? "").trim();
+      finalResponse.text = md;
   
+      // ⬇️ Один (!) виклик до xTiles з урахуванням projectId
+      try {
+        const { url, projectId } = await sendMarkdownToXtiles(md, currentProjectId);
+        finalResponse.projectUrl = url;
+        finalResponse.projectId = projectId ?? currentProjectId;
+      } catch (e) {
+        console.error("Failed to send to xTiles:", e);
+      }
+  
+      // Джерела (grounding)
       const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
       if (groundingMetadata?.groundingChunks) {
         finalResponse.sources = groundingMetadata.groundingChunks
           .map((chunk) => chunk.web)
-          .filter(
-            (web): web is { uri: string; title: string } => !!web && !!web.uri
-          );
+          .filter((web): web is { uri: string; title: string } => !!web && !!web.uri);
       }
   
       return finalResponse;
@@ -168,6 +174,9 @@ import {
         projectContext: undefined,
         inputTokens: 0,
         outputTokens: 0,
+        projectUrl: undefined,
+        projectId: currentProjectId, // збережемо, якщо він уже був
       };
     }
-  }  
+  }
+  

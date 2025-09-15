@@ -19,6 +19,10 @@ const App: React.FC = () => {
   const [tokenCount, setTokenCount] = useState<{ input: number; output: number } | null>(null);
   const [useContextTool, setUseContextTool] = useState(true);
   const [includeHistory, setIncludeHistory] = useState(true);
+
+  // NEW: один проєкт на чат
+  const [projectId, setProjectId] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -34,6 +38,7 @@ const App: React.FC = () => {
     setMessages([initialMessage]);
     setProjectContext(null);
     setTokenCount(null);
+    setProjectId(null); // NEW: починаємо новий проєкт
   };
   
   const handleToolToggle = () => {
@@ -59,7 +64,13 @@ const App: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await sendMessageToGemini(userMessage, useContextTool, includeHistory);
+      // NEW: передаємо поточний projectId, щоб додавати сторінки у той самий проєкт
+      const response = await sendMessageToGemini(
+        userMessage,
+        useContextTool,
+        includeHistory,
+        projectId ?? undefined
+      );
 
       if (response.projectContext) {
         setProjectContext(response.projectContext);
@@ -67,10 +78,21 @@ const App: React.FC = () => {
       
       setTokenCount({ input: response.inputTokens, output: response.outputTokens });
 
+      // NEW: зберігаємо/оновлюємо projectId з відповіді (після першого запиту він з'явиться)
+      if (response.projectId && response.projectId !== projectId) {
+        setProjectId(response.projectId);
+      }
+
+      // Якщо є URL від xTiles — показуємо клікабельний лінк-стікер; інакше — фолбек на текст
+      const contentForChat =
+        response.projectUrl && response.projectUrl.length > 0
+          ? `[Відкрити проєкт](${response.projectUrl})`
+          : (response.text?.trim() || "Не вдалося отримати посилання на проєкт.");
+
       const newAssistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: MessageRole.MODEL,
-        content: response.text,
+        content: contentForChat,
         sources: response.sources,
       };
       setMessages((prev) => [...prev, newAssistantMessage]);
@@ -158,7 +180,7 @@ const App: React.FC = () => {
             ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.375 3.375 0 0014 18.442V19.5a3 3 0 01-6 0v-1.059a3.375 3.375 0 00-.75-2.122l-.547-.547z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.375 3.375 0 0014 18.442V19.5a3 3 0 01-6 0v-1.059a3.375 3.375 0 00-.75-2.122л-.547-.547z" />
                     </svg>
                     <p className="mt-4 font-semibold">Єдиний контекст проєкту з'явиться тут</p>
                     <p className="text-xs mt-1">Він відображає головну мету та деталі, що оновлюються з кожним вашим запитом.</p>
